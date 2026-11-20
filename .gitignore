@@ -1,0 +1,33 @@
+# Entorno virtual de Python (cada integrante crea el suyo)
+.venv/
+venv/
+
+# Cachés de Python y Numba
+__pycache__/
+*.pyc
+*.nbi
+*.nbc
+
+# Binarios y objetos de C
+*.o
+*.out
+c_omp/bh
+
+# Notebooks
+.ipynb_checkpoints/
+
+# Distribuciones de partículas: las grandes se generan con tools/gen_dist.py.
+# Solo se versionan las pequeñas de data/prueba/.
+data/*
+!data/.gitkeep
+!data/prueba/
+
+# Basura de editores y sistemas operativos
+.vscode/
+.idea/
+*.swp
+.DS_Store
+*:Zone.Identifier
+
+# Configuración local de Claude Code
+.claude/settings.local.json
