@@ -47,6 +47,42 @@ N va de 20.000 a 200.000 partículas. Proyecto de grupo de 3 integrantes (A, B, 
 - El reparto de trabajo entre procesos o hilos es **por costo** (interacciones por partícula del paso
   anterior), no por número de partículas. Las distribuciones de la demo castigan el reparto ingenuo.
 
+## Interfaz del núcleo Python (acordada por A y B)
+
+- Dueños: `morton.py` y `traverse.py` → B; `tree.py` e `integrate.py` → A.
+- Las funciones reciben partículas **ya ordenadas por Morton**: `pos float64[N,3]`, `vel float64[N,3]`,
+  `mass float64[N]`. Para `--dump-forces`: `acc_orig[perm] = acc` con la permutación del paso 0.
+- El árbol viaja como `Tree = namedtuple("Tree", [los 9 campos node_*])`, con M nodos; reales en `float64`,
+  enteros en `int64`, `-1` significa "no hay". Raíz en el índice 0.
+- Firmas:
+  ```python
+  # morton.py
+  local_bounds(pos) -> (lo float64[3], hi float64[3])            # NumPy (MPI hace Allreduce de lo/hi)
+  cube_from_bounds(lo, hi) -> (origin float64[3], size float)    # NumPy
+  @njit morton_codes(pos, origin, size) -> uint64[N]
+  morton_order(codes) -> perm int64[N]                           # np.argsort(kind="stable")
+  # tree.py
+  MAX_DEPTH = 21                                                 # PUNTO DE MODIFICACIÓN
+  @njit build_tree(codes, origin, size) -> Tree                  # topología; llama a link_next al final
+  @njit compute_mass_com(tree, pos, mass) -> None                # en el lugar
+  @njit link_next(tree) -> None                                  # pública: la reutiliza mpi/let.py
+  # traverse.py
+  @njit accel_one(tree, src_pos, src_mass, x, y, z, theta, eps) -> (ax, ay, az, n_inter)
+  @njit compute_accelerations(tree, src_pos, src_mass, tgt_pos, theta, eps)
+        -> (acc float64[M,3], cost int64[M])                     # M = partículas objetivo
+  # integrate.py
+  kick(vel, acc, dt), drift(pos, vel, dt)                        # NumPy, en el lugar
+  kinetic_energy(vel, mass) -> float
+  @njit potential_energy(pos, mass, eps) -> float                # O(N²), solo N pequeño
+  ```
+- El ciclo KDK va en cada `main.py`, no en `integrate.py`. Celda aceptada si `(2·node_half)² < θ²·d²`.
+- Un nodo es hoja si `node_n_children == 0`. `node_body_start` indexa el arreglo `src_*` que se pasa con
+  el árbol. Los hijos de un nodo son contiguos.
+- **LET**: cada envío es un `Tree` independiente con sus propias `src_pos`/`src_mass`. Los nodos podados
+  son pseudo-hojas (`n_children = 0`, `body_count = 0`, masa y centro de masa válidos) y se usan siempre
+  como masa puntual. El receptor llama a `compute_accelerations` con su árbol local y con cada LET
+  recibido, y suma aceleraciones y costos. Una sola función de recorrido; no se fusionan árboles.
+
 ## Contrato común (no cambiar sin acuerdo del grupo)
 
 - Entrada: archivo de texto con N filas y 7 columnas `x y z vx vy vz m`.
