@@ -76,6 +76,8 @@ N va de 20.000 a 200.000 partículas. Proyecto de grupo de 3 integrantes (A, B, 
   @njit potential_energy(pos, mass, eps) -> float                # O(N²), solo N pequeño
   ```
 - El ciclo KDK va en cada `main.py`, no en `integrate.py`. Celda aceptada si `(2·node_half)² < θ²·d²`.
+- Convención de bits de Morton: en cada nivel `octante = (bit_x << 2) | (bit_y << 1) | bit_z`; el octante
+  del nivel `L` (raíz = 0) es `(code >> 3*(20 - L)) & 7`. `tree.py` calcula el centro de cada hijo con ella.
 - Un nodo es hoja si `node_n_children == 0`. `node_body_start` indexa el arreglo `src_*` que se pasa con
   el árbol. Los hijos de un nodo son contiguos.
 - **LET**: cada envío es un `Tree` independiente con sus propias `src_pos`/`src_mass`. Los nodos podados
