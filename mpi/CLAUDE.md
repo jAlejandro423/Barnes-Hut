@@ -12,7 +12,8 @@ Este archivo complementa el `CLAUDE.md` de la raíz; no lo reemplaza. Enunciado 
 ## Lo que me toca
 - Núcleo Python compartido con A (integrante A): yo hago `core_py/morton.py` (códigos de Morton de 63 bits,
   21 por eje, y ordenamiento) y `core_py/traverse.py` (recorrido con θ sin recursión usando `node_next`).
-  A hace `core_py/tree.py`. Respeta los nombres de arreglos del `CLAUDE.md` raíz.
+  A hace `core_py/tree.py` y `core_py/integrate.py`. Las firmas y la decisión del LET están en la sección
+  "Interfaz del núcleo Python (acordada por A y B)" del `CLAUDE.md` raíz; respétalas.
 - Toda la carpeta `mpi/`: `main.py`, `partition.py` (Morton por costo y ORB), `let.py` (ramas remotas).
 - Revisa mis PR: C. Yo reviso los de A. Soy segundo dueño de CUDA (debo poder modificarla en la demo).
 
