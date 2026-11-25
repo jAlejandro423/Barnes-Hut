@@ -1,4 +1,4 @@
-"""Suma directa O(N²): aceleraciones exactas, la referencia contra la que se verifica cada versión.
+"""Suma directa O(N²): aceleraciones y energía exactas, la referencia contra la que se verifica cada versión.
 
     a_i = Σ_{j≠i}  m_j (r_j - r_i) / (|r_j - r_i|² + ε²)^(3/2)       (G = 1)
 
@@ -44,6 +44,31 @@ def direct_accelerations(pos, mass, eps):
         acc[i, 1] = ay
         acc[i, 2] = az
     return acc
+
+
+def direct_kinetic_energy(vel, mass):
+    """K = Σ ½ m v²."""
+    return 0.5 * float(np.sum(mass * np.sum(vel * vel, axis=1)))
+
+
+@njit
+def direct_potential_energy(pos, mass, eps):
+    """U = -Σ_{i<j} m_i m_j / sqrt(r² + ε²). O(N²).
+
+    Es la referencia de energía de verify.py. Está aquí, y no se importa de core_py, para que la
+    verificación no dependa del código que verifica: si core_py tuviera un bug en la energía,
+    la versión y el verificador fallarían igual y la prueba pasaría sin verlo.
+    """
+    n = pos.shape[0]
+    eps2 = eps * eps
+    u = 0.0
+    for i in range(n):
+        for j in range(i + 1, n):
+            dx = pos[j, 0] - pos[i, 0]
+            dy = pos[j, 1] - pos[i, 1]
+            dz = pos[j, 2] - pos[i, 2]
+            u -= mass[i] * mass[j] / np.sqrt(dx * dx + dy * dy + dz * dz + eps2)
+    return u
 
 
 def main():
