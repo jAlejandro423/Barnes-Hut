@@ -32,7 +32,8 @@ def kinetic_energy(vel, mass):
 def potential_energy(pos, mass, eps):
     """U = -Σ_{i<j} m_i m_j / sqrt(r² + ε²). O(N²): solo para N pequeño (verificación).
 
-    Con j > i cada par se cuenta una sola vez y nunca se toma j = i.
+    Con j > i cada par se cuenta una sola vez. Regla común del grupo (CLAUDE.md): el par se salta si
+    r2·sqrt(r2) == 0 (ε = 0 y dos partículas en el mismo punto), los mismos pares que salta el recorrido.
     """
     n = pos.shape[0]
     eps2 = eps * eps
@@ -42,5 +43,9 @@ def potential_energy(pos, mass, eps):
             dx = pos[j, 0] - pos[i, 0]
             dy = pos[j, 1] - pos[i, 1]
             dz = pos[j, 2] - pos[i, 2]
-            u -= mass[i] * mass[j] / np.sqrt(dx * dx + dy * dy + dz * dz + eps2)
+            r2 = dx * dx + dy * dy + dz * dz + eps2
+            r = np.sqrt(r2)
+            if r2 * r == 0.0:
+                continue                    # regla común: par saltado
+            u -= mass[i] * mass[j] / r
     return u
