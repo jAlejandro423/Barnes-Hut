@@ -27,7 +27,12 @@ Ver la sección "Interfaz del núcleo Python (acordada por A y B)" del `CLAUDE.m
    `Allreduce` de `lo`/`hi` entre ambas y todos los procesos usen los mismos códigos de Morton.
 3. **Fuentes y objetivos separados en el recorrido** (`src_pos`/`src_mass` y `tgt_pos`): python_mp y MPI
    calculan solo un subconjunto de partículas, y el mismo recorrido sirve para cada LET.
-   - La autointeracción no se excluye: con suavizado, `r_j - r_i = 0` da fuerza 0.
+   - La autointeracción no se excluye por índice (fuentes y objetivos son arreglos distintos, y en el LET
+     ni siquiera son las mismas partículas). Con ε > 0 su fuerza es 0. Con ε = 0, o ε tan pequeño que
+     r²·sqrt(r²) da 0, se salta el par: sin eso Numba lanza ZeroDivisionError y en C sale NaN en silencio.
+     Lo detectó A probando `direct_sum.py` con ε = 0 (yo había escrito que el suavizado bastaba siempre).
+     A propuso `r2 == 0`; se cambió a `r2·sqrt(r2) == 0` porque con ε = 1e-160 queda ε² = 1e-320 ≠ 0,
+     pero r³ sí da 0.
 4. **`integrate.py` lo escribe A**: son unas 30 líneas y va junto a la verificación de energía de
    `tools/verify.py`, que es de A. B ya tiene la versión más difícil.
    - Descartado: que lo escriba B porque su paso 1 lo necesita; basta con acordar la firma, y B revisa
@@ -56,6 +61,35 @@ Ver la sección "Interfaz del núcleo Python (acordada por A y B)" del `CLAUDE.m
    propio (más código sin ganancia en Python). ~0,018 s para N = 200.000.
 5. Riesgo para la demo: con `concentrada` y pocas partículas lejanas, el cubo es enorme, muchas partículas
    comparten código en el nivel 21 y quedan hojas grandes de suma directa (O(k²)). Ver `MAX_DEPTH`.
+
+### 2026-11-25 — `core_py/traverse.py`
+
+1. **Tres funciones pequeñas**: `pair_accel` (fórmula y protección de ε = 0), `accept_cell` (criterio θ,
+   `PUNTO DE MODIFICACIÓN`) y `accel_one` (recorrido). Todas las interacciones pasan por `pair_accel`:
+   hojas, celdas aceptadas y pseudo-hojas, así que la protección y la fórmula están en un solo lugar.
+   - Descartado: todo dentro de `accel_one` (un cambio de θ o de fórmula en la demo quedaría enterrado).
+2. **Recorrido con `node_next`, sin pila ni recursión**: hoja o celda aceptada → `node_next`; celda
+   rechazada → `node_first_child`. Termina en -1.
+   - Descartado: pila explícita (funciona, pero `node_next` ya existe y es lo que porta CUDA) y recursión
+     (el enunciado pide recorrido sin recursión; CUDA la evita).
+3. **Hojas con partículas siempre por suma directa**, sin probar θ: cubre las hojas grandes de `MAX_DEPTH`.
+4. **Costo = interacciones evaluadas** (partículas + celdas) por objetivo; es lo que reparten python_mp y MPI.
+5. **`compute_accelerations` sin `parallel=True`**: el paralelismo lo ponen python_mp y MPI con procesos;
+   mezclar hilos de Numba con procesos confundiría las mediciones.
+6. **Riesgo con θ grande**: con la distancia al centro de masa, si θ ≥ 1/sqrt(3) ≈ 0,58 una celda puede
+   aceptarse aunque contenga a la propia partícula (el centro de masa puede estar a una diagonal de ella).
+   Con θ = 0,5 no pasa. Alternativas documentadas en `accept_cell`: distancia al centro geométrico, o
+   exigir además d > tamaño.
+7. Resultados (N = 2.000, contra `direct_sum.py` del PR #3, criterio de `verify.py`):
+   - θ = 0: error ~1e-15 en las 4 distribuciones (no 0 exacto: se suma en orden de Morton y la referencia
+     en orden de entrada).
+   - θ = 0,5: mediana entre 2,8e-3 (plummer) y 1,3e-2 (concentrada, la más cercana al límite 2,5e-2,
+     porque la nube densa mide lo mismo que ε).
+   - Costo con θ = 0,5 en plummer: mínimo 52, medio 514, máximo 872 interacciones. La partícula más cara
+     cuesta 17 veces la más barata: repartir por número de partículas desbalancea.
+   - Fuentes partidas en 2 árboles y sumadas (como el LET): misma precisión contra la suma directa
+     (mediana 3,3e-3 contra 2,8e-3 con un solo árbol).
+   - N = 20.000 uniforme, θ = 0,5: árbol + recorrido en 0,11 s por paso (sin compilación).
 
 ## Decisiones pendientes (proponer antes de programar)
 
