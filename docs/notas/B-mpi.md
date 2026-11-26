@@ -91,6 +91,26 @@ Ver la sección "Interfaz del núcleo Python (acordada por A y B)" del `CLAUDE.m
      (mediana 3,3e-3 contra 2,8e-3 con un solo árbol).
    - N = 20.000 uniforme, θ = 0,5: árbol + recorrido en 0,11 s por paso (sin compilación).
 
+### 2026-11-25 — `mpi/main.py`, versión secuencial (P = 1)
+
+1. **El secuencial es el esqueleto de `mpi/main.py`**: el ciclo, el CLI y las salidas son los definitivos;
+   el reparto por costo, el LET y `comunicacion` se agregan encima. Se corre sin `mpirun`.
+   - Descartado: un archivo secuencial aparte (no está en la estructura, duplicaría código).
+2. **Las partículas se reordenan físicamente cada paso con un arreglo `ids`** (índice en el archivo).
+   `--dump-forces` usa `acc_orig[ids] = acc`. En MPI las partículas migran y `ids` hace falta igual.
+   - Descartado: dejar los arreglos en orden de entrada y ordenar copias (no sirve cuando migran).
+   - `sort_particles` reordena pos, vel, mass e ids con la misma permutación: si vel quedara en el orden
+     viejo, el kick mezclaría velocidades. Las fuerzas del paso 0 no lo detectarían; la energía sí.
+3. **Salidas con `%.17g`**: con `%.6g` falla E0 en `verify.py` (tolerancia 1e-8) aunque el cálculo esté bien.
+4. **Tiempos**: suma por fase de todos los pasos; la energía no se mide. El calentamiento de Numba se hace
+   con 64 partículas (Numba compila según los tipos, no según el tamaño), así no cuesta un paso completo.
+5. Resultados con `verify.py` del PR #3 (N = 2.000, 100 pasos): PASA en uniforme (θ = 0,5 y θ = 0),
+   plummer y dos_cumulos. E0 coincide hasta ~1e-14. Deriva de energía en uniforme 3e-4 con θ = 0,5 y
+   2,2e-4 con θ = 0: viene del integrador (dt), no del árbol.
+6. Tiempos con N = 20.000 uniforme, 20 pasos: recorrido 2,87 s (96 %), ordenamiento 0,07 s, árbol 0,04 s,
+   integración 0,01 s. El recorrido es lo que hay que repartir; la fracción secuencial (orden + árbol)
+   es ~4 %, lo que limita el speedup teórico (Amdahl) si esa parte no se paraleliza.
+
 ## Decisiones pendientes (proponer antes de programar)
 
 - Distribución de partículas al inicio y entre pasos (quién lee el archivo, `Scatterv` / `Alltoallv`).
