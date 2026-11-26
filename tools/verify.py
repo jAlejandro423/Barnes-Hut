@@ -11,8 +11,13 @@ Pasos:
   2. Corre la versión con el CLI común y le pide --dump-forces y --energy-log.
   3. Fuerzas: error relativo por partícula |a - a_directa| / |a_directa|. Se juzgan la mediana y el
      percentil 99; el máximo solo se informa (donde |a_directa| ≈ 0 el error relativo se infla).
-  4. Energía: el E0 de la versión debe coincidir con el calculado aquí, y la deriva máxima
-     |E - E0| / |E0| debe quedar bajo la tolerancia.
+  4. Energía: el log debe tener una fila por paso, de 0 a --steps; el E0 de la versión debe coincidir
+     con el calculado aquí, y la deriva máxima |E - E0| / |E0| debe quedar bajo la tolerancia.
+
+Formato que exige a la versión (contrato del CLAUDE.md):
+  --dump-forces  N filas × 3 columnas, paso 0, en el orden original de entrada.
+  --energy-log   CSV con encabezado step,K,U,E y una fila por paso (0, 1, ..., steps), con los números
+                 escritos con %.17g: con menos dígitos (p. ej. %.6g) el E0 no alcanza la tolerancia de 1e-8.
 
 Las referencias (fuerzas y energía) salen solo de tools/direct_sum.py; verify.py no importa core_py,
 para no verificar un código con él mismo.
@@ -63,7 +68,7 @@ def force_tolerances(theta):
 def prepare_input(args):
     """Devuelve la ruta del archivo de entrada: la de --input o una distribución generada en data/verify/."""
     if args.input:
-        return args.input
+        return os.path.abspath(args.input)    # la versión corre con cwd = REPO: una ruta relativa no serviría
     folder = os.path.join(REPO, "data", "verify")
     os.makedirs(folder, exist_ok=True)
     path = os.path.join(folder, f"{args.tipo}_{args.n}_{args.seed}.txt")
@@ -113,10 +118,15 @@ def check_forces(acc, acc_ref, theta):
     return median_ok and p99_ok
 
 
-def check_energy(log, e0_ref):
+def check_energy(log, e0_ref, steps):
     """Revisa el CSV step,K,U,E. Devuelve True si pasa."""
     if log.ndim != 2 or log.shape[0] < 2 or log.shape[1] != 4:
         print(f"  FALLA: el log de energía debe tener columnas step,K,U,E y al menos 2 filas (tiene {log.shape})")
+        return False
+    # Una fila por paso, de 0 a steps: una versión que se detiene antes no tiene tiempo de derivar y pasaría.
+    if log.shape[0] != steps + 1 or not np.array_equal(log[:, 0], np.arange(steps + 1)):
+        print(f"  FALLA: el log debe tener los pasos 0, 1, ..., {steps} en orden ({steps + 1} filas); "
+              f"tiene {log.shape[0]} filas, de {log[0, 0]:.0f} a {log[-1, 0]:.0f}")
         return False
     energy = log[:, 3]
     if not np.all(np.isfinite(energy)):
@@ -198,7 +208,7 @@ def main():
     if os.path.exists(energy_path):
         log = np.loadtxt(energy_path, delimiter=",", skiprows=1, ndmin=2)
         e0_ref = direct_kinetic_energy(vel, mass) + direct_potential_energy(pos, mass, args.eps)
-        energy_ok = check_energy(log, e0_ref)
+        energy_ok = check_energy(log, e0_ref, args.steps)
     else:
         print(f"  FALLA: la versión no escribió {energy_path}")
         energy_ok = False
