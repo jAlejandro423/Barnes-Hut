@@ -76,6 +76,9 @@ N va de 20.000 a 200.000 partículas. Proyecto de grupo de 3 integrantes (A, B, 
   @njit potential_energy(pos, mass, eps) -> float                # O(N²), solo N pequeño
   ```
 - El ciclo KDK va en cada `main.py`, no en `integrate.py`. Celda aceptada si `(2·node_half)² < θ²·d²`.
+- Interacción de un par (en todas las versiones, también `direct_sum.py` y la energía): se salta si
+  `r2·sqrt(r2) == 0` (ε = 0 o puntos coincidentes); no se comparan índices. Sin esto, Numba lanza
+  `ZeroDivisionError` y C/CUDA producen NaN en silencio.
 - Convención de bits de Morton: en cada nivel `octante = (bit_x << 2) | (bit_y << 1) | bit_z`; el octante
   del nivel `L` (raíz = 0) es `(code >> 3*(20 - L)) & 7`. `tree.py` calcula el centro de cada hijo con ella.
 - Un nodo es hoja si `node_n_children == 0`. `node_body_start` indexa el arreglo `src_*` que se pasa con
