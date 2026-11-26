@@ -40,6 +40,23 @@ Ver la sección "Interfaz del núcleo Python (acordada por A y B)" del `CLAUDE.m
    - Descartado: fusionar el LET con el árbol local (hay que reenlazar índices y `node_next`; frágil).
    - Con θ = 0 el criterio del emisor abre todo, no hay pseudo-hojas y MPI coincide con la suma directa.
 
+### 2026-11-21 — `core_py/morton.py`
+
+1. **Cubo, no caja**: lado = mayor lado de la caja, centrado en ella, con margen relativo `1e-6`.
+   El octree necesita celdas cúbicas (`node_half` es un solo número). Sin margen, la partícula del borde
+   superior se normalizaría a 2²¹ exacto, que necesita 22 bits.
+2. **Intercalado con un bucle de 21 niveles** desde la raíz: `code = (code << 3) | octante`.
+   - Descartado: "números mágicos" (máscaras y desplazamientos). Algo más rápido, pero ilegible y no se
+     reconstruye de memoria. El bucle tarda ~0,006 s para N = 200.000.
+   - Se calcula en `int64` y se guarda en `uint64`: en Numba, `uint64` con `int64` da `float64` y se
+     perderían bits.
+3. **Convención de bits fija** (`octante = (bit_x << 2) | (bit_y << 1) | bit_z`), escrita en el `CLAUDE.md`
+   raíz. Descartado dejarla implícita: si `tree.py` usara otro orden, el árbol saldría mal sin ningún error.
+4. **`np.argsort(kind="stable")`** fuera de Numba: reproducible con códigos repetidos. Descartado radix sort
+   propio (más código sin ganancia en Python). ~0,018 s para N = 200.000.
+5. Riesgo para la demo: con `concentrada` y pocas partículas lejanas, el cubo es enorme, muchas partículas
+   comparten código en el nivel 21 y quedan hojas grandes de suma directa (O(k²)). Ver `MAX_DEPTH`.
+
 ## Decisiones pendientes (proponer antes de programar)
 
 - Distribución de partículas al inicio y entre pasos (quién lee el archivo, `Scatterv` / `Alltoallv`).
