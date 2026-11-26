@@ -111,6 +111,26 @@ Ver la sección "Interfaz del núcleo Python (acordada por A y B)" del `CLAUDE.m
    integración 0,01 s. El recorrido es lo que hay que repartir; la fracción secuencial (orden + árbol)
    es ~4 %, lo que limita el speedup teórico (Amdahl) si esa parte no se paraleliza.
 
+### 2026-11-26 — `concentrada` no conserva la energía con los valores por defecto
+
+Con `verify.py` ya fusionado (N = 2.000, 100 pasos): fuerzas bien (mediana 1,3e-2, límite 2,5e-2) y E0
+coincide, pero la deriva de energía falla. No es un bug; hay dos causas y se separaron con mediciones:
+
+1. **dt demasiado grande**: la nube densa tiene σ = 1e-3, igual que ε, y colapsa en seguida. Con
+   dt = 1e-3 la energía cambia 600 % en el paso 1. Con θ = 0 (suma directa) y dt = 1e-6 se conserva
+   (deriva 5,9e-6): el integrador y las fuerzas exactas están bien.
+2. **Aproximación del árbol**: con dt = 1e-6 la deriva baja con θ, más o menos como θ²:
+
+   | θ                   | 0,5    | 0,4    | 0,3    | 0,2    | 0      |
+   |---------------------|--------|--------|--------|--------|--------|
+   | deriva (dt = 1e-6)  | 3,7e-3 | 2,2e-3 | 1,0e-3 | 2,8e-4 | 5,9e-6 |
+
+   Las fuerzas del árbol no salen exactamente de un potencial, y el error pesa más donde la nube densa
+   domina la energía (E0 = -182 contra -0,94 en uniforme).
+
+Para la demo con cúmulos densos: bajar `--dt` primero; si además piden conservar la energía, bajar `--theta`
+(más precisión a cambio de más interacciones). Afecta a todas las versiones, no solo a MPI.
+
 ## Decisiones pendientes (proponer antes de programar)
 
 - Distribución de partículas al inicio y entre pasos (quién lee el archivo, `Scatterv` / `Alltoallv`).
