@@ -49,19 +49,31 @@ Decisiones tomadas, alternativas descartadas y resultados de verificación. Lo q
 | --- | --- |
 | `uniforme`, N=5000, θ=0.5, P=4 | PASA; mediana 3.3e-3, p99 1.8e-2, deriva 1.3e-5 |
 | `plummer`, N=5000, θ=0.5, P=8 | PASA; mediana 2.1e-3, p99 1.5e-2, deriva 4.9e-6 |
+| `dos_cumulos`, N=5000, θ=0.5, P=4, dt=1e-4 | PASA; mediana 2.4e-3, p99 1.4e-2, deriva 3.9e-6 |
+| `concentrada`, N=5000, θ=0.5, P=4, dt=1e-6 | FALLA por energía: deriva 3.8e-3; con dt=1e-7 PASA (2.7e-5) |
 | `uniforme`, N=2000, θ=0, P=2 | PASA; mediana 1.4e-15 (coincide con suma directa) |
 
 Comando: `.venv/bin/python tools/verify.py --version omp --n 5000 --theta 0.5 --workers 4`.
+
+La falla de `concentrada` con dt=1e-6 no es del árbol: las fuerzas pasan y E0 coincide con la suma
+directa. El tiempo dinámico de la nube densa (σ=1e-3, M≈0.9) es del orden de 3e-5, así que hay que
+bajar a dt=1e-7 para que la deriva quede bajo 1e-3.
 
 **Ojo al verificar:** `verify.py` usa los mismos archivos de salida para todas las corridas de una
 misma versión. Si se lanzan dos `verify.py --version omp` en paralelo se sobrescriben
 `fuerzas_omp.txt` y `energia_omp.csv`; hay que ejecutarlos en serie.
 
+## Escalado medido (2026-11-26)
+
+`results/omp_escalado.csv`: uniforme N=20000, 20 pasos, θ=0.5, P=1,2,4,8.
+Totales 2.19 / 1.34 / 0.95 / 0.91 s (speedup 1.0 / 1.6 / 2.3 / 2.4). El recorrido escala mejor
+(2.05 / 1.21 / 0.83 / 0.61 s); la fase `arbol` empeora con P=8 (0.21 s contra 0.06 s con P=4) por
+la sobrecarga de la construcción paralela con más hilos que núcleos físicos.
+
 ## Pendiente
 
-- Probar `dos_cumulos` y `concentrada` con `dt` reducido (la deriva puede venir del integrador, no
-  del árbol).
-- Medir escalado P=1,2,4,8 con `bench.py` cuando A lo termine.
+- Repetir el escalado con `bench.py` cuando A lo termine y con `plummer`/`dos_cumulos`.
+- Probar CUDA en Colab T4.
 
 ## Revisión de ramas de B (2026-11-26, solo lectura)
 
