@@ -92,7 +92,8 @@ N va de 20.000 a 200.000 partículas. Proyecto de grupo de 3 integrantes (A, B, 
   `--input --steps --dt --theta --eps --workers --partition --dump-forces --energy-log --timing`
 - Salidas:
   - `--dump-forces`: aceleraciones del paso 0, N filas × 3 columnas, en el orden original de entrada.
-  - `--energy-log`: CSV `step,K,U,E`.
+  - `--energy-log`: CSV `step,K,U,E`, una fila por paso de 0 a `--steps`, números con `%.17g`
+    (`verify.py` compara el E0 con tolerancia 1e-8; con `%.6g` falla).
   - `--timing`: CSV `version,N,P,fase,segundos`.
 - Fases de tiempo: `arbol`, `ordenamiento`, `recorrido`, `integracion`, y `comunicacion` en MPI.
 - En Numba, la primera llamada compila: hacer un paso de calentamiento y no medirlo.
