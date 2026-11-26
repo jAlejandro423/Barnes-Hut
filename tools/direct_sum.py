@@ -19,8 +19,10 @@ from numba import njit
 def direct_accelerations(pos, mass, eps):
     """pos float64[N,3], mass float64[N], eps float -> acc float64[N,3].
 
-    Se salta j = i: con ε > 0 esa contribución vale cero, pero con ε = 0 sería 0/0.
-    Así la referencia es correcta para cualquier ε.
+    Regla común del grupo (CLAUDE.md): el par se salta si r2·sqrt(r2) == 0 (ε = 0 con j = i, o dos
+    partículas en el mismo punto). No basta con saltar j = i: dos partículas distintas en el mismo punto
+    también darían 0/0. Se compara r³ y no r2 porque con ε muy pequeño (1e-160) r2 no es 0 pero r³ sí.
+    Así la referencia salta exactamente los mismos pares que las versiones.
     """
     n = pos.shape[0]
     eps2 = eps * eps
@@ -30,13 +32,14 @@ def direct_accelerations(pos, mass, eps):
         ay = 0.0
         az = 0.0
         for j in range(n):
-            if j == i:
-                continue
             dx = pos[j, 0] - pos[i, 0]
             dy = pos[j, 1] - pos[i, 1]
             dz = pos[j, 2] - pos[i, 2]
             r2 = dx * dx + dy * dy + dz * dz + eps2
-            factor = mass[j] / (r2 * np.sqrt(r2))      # m_j / (r² + ε²)^(3/2)
+            r3 = r2 * np.sqrt(r2)                      # (r² + ε²)^(3/2)
+            if r3 == 0.0:
+                continue                               # regla común: par saltado
+            factor = mass[j] / r3
             ax += factor * dx
             ay += factor * dy
             az += factor * dz
@@ -55,6 +58,7 @@ def direct_kinetic_energy(vel, mass):
 def direct_potential_energy(pos, mass, eps):
     """U = -Σ_{i<j} m_i m_j / sqrt(r² + ε²). O(N²).
 
+    Salta los mismos pares que direct_accelerations (r2·sqrt(r2) == 0).
     Es la referencia de energía de verify.py. Está aquí, y no se importa de core_py, para que la
     verificación no dependa del código que verifica: si core_py tuviera un bug en la energía,
     la versión y el verificador fallarían igual y la prueba pasaría sin verlo.
@@ -67,7 +71,11 @@ def direct_potential_energy(pos, mass, eps):
             dx = pos[j, 0] - pos[i, 0]
             dy = pos[j, 1] - pos[i, 1]
             dz = pos[j, 2] - pos[i, 2]
-            u -= mass[i] * mass[j] / np.sqrt(dx * dx + dy * dy + dz * dz + eps2)
+            r2 = dx * dx + dy * dy + dz * dz + eps2
+            r = np.sqrt(r2)
+            if r2 * r == 0.0:
+                continue                               # regla común: los mismos pares que las fuerzas
+            u -= mass[i] * mass[j] / r
     return u
 
 
