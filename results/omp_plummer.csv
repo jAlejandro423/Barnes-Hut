@@ -1,0 +1,17 @@
+version,N,P,fase,segundos
+omp,20000,1,ordenamiento,0.052999
+omp,20000,1,arbol,0.095685
+omp,20000,1,recorrido,4.957246
+omp,20000,1,integracion,0.002947
+omp,20000,2,ordenamiento,0.058121
+omp,20000,2,arbol,0.072960
+omp,20000,2,recorrido,2.857953
+omp,20000,2,integracion,0.001932
+omp,20000,4,ordenamiento,0.062963
+omp,20000,4,arbol,0.065983
+omp,20000,4,recorrido,1.948768
+omp,20000,4,integracion,0.002506
+omp,20000,8,ordenamiento,0.082749
+omp,20000,8,arbol,0.124147
+omp,20000,8,recorrido,1.533466
+omp,20000,8,integracion,0.023267

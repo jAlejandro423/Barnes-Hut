@@ -42,6 +42,9 @@ Decisiones tomadas, alternativas descartadas y resultados de verificación. Lo q
    (requiere guardar los límites de cada nivel); no valió la pena, es O(N) frente al recorrido.
 5. **Medición con `omp_get_wtime`**, fases `ordenamiento`, `arbol`, `recorrido`, `integracion`.
    El calentamiento usa 64 partículas y no se mide, como pide el contrato.
+6. **Energía solo si N ≤ `BH_MAX_N_ENERGY` (5000)**: si piden `--energy-log` con N mayor se avisa y no
+   se escribe el CSV, porque U es O(N²). `PUNTO DE MODIFICACIÓN` en `core_c/common.h`. Descartado:
+   reportar U = 0 o solo K, que rompe el contrato `step,K,U,E`.
 
 ## Verificación (2026-11-26, WSL2, 4 núcleos físicos / 8 hilos)
 
@@ -57,7 +60,9 @@ Comando: `.venv/bin/python tools/verify.py --version omp --n 5000 --theta 0.5 --
 
 La falla de `concentrada` con dt=1e-6 no es del árbol: las fuerzas pasan y E0 coincide con la suma
 directa. El tiempo dinámico de la nube densa (σ=1e-3, M≈0.9) es del orden de 3e-5, así que hay que
-bajar a dt=1e-7 para que la deriva quede bajo 1e-3.
+bajar a dt=1e-7 para que la deriva quede bajo 1e-3. El 2026-11-26 se regeneró
+`data/verify/energia_omp.csv` con `--tipo concentrada --dt 1e-7`: E0 = -181.7212013555 coincide con
+la suma directa (dif. rel. 1.8e-13) y la deriva máxima quedó en 2.72e-5.
 
 **Ojo al verificar:** `verify.py` usa los mismos archivos de salida para todas las corridas de una
 misma versión. Si se lanzan dos `verify.py --version omp` en paralelo se sobrescriben
@@ -70,9 +75,19 @@ Totales 2.19 / 1.34 / 0.95 / 0.91 s (speedup 1.0 / 1.6 / 2.3 / 2.4). El recorrid
 (2.05 / 1.21 / 0.83 / 0.61 s); la fase `arbol` empeora con P=8 (0.21 s contra 0.06 s con P=4) por
 la sobrecarga de la construcción paralela con más hilos que núcleos físicos.
 
+El 2026-11-26 se repitió con las otras dos distribuciones (N=20000, 20 pasos, θ=0.5):
+
+| archivo | totales P=1/2/4/8 (s) | speedup | recorrido P=1→8 (s) |
+| --- | --- | --- | --- |
+| `results/omp_plummer.csv` | 5.11 / 2.99 / 2.08 / 1.76 | 1.0 / 1.7 / 2.5 / 2.9 | 4.96 → 1.53 (3.2×) |
+| `results/omp_dos_cumulos.csv` | 4.52 / 2.56 / 1.89 / 1.56 | 1.0 / 1.8 / 2.4 / 2.9 | 4.36 → 1.32 (3.3×) |
+
+En ambas, `arbol` vuelve a empeorar con P=8 (0.12-0.13 s contra 0.06 s con P=4): el límite está en
+la sobrecarga de la construcción paralela, no en el reparto por costo del recorrido.
+
 ## Pendiente
 
-- Repetir el escalado con `bench.py` cuando A lo termine y con `plummer`/`dos_cumulos`.
+- Repetir los tres escalados con `bench.py` cuando A lo termine (los CSV ya están medidos con `--timing`).
 - Probar CUDA en Colab T4.
 
 ## Revisión de ramas de B (2026-11-26, solo lectura)

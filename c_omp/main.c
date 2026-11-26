@@ -241,6 +241,13 @@ int main(int argc, char **argv)
     int64_t n = 0;
     if (bh_read_input(args.input, &pos, &vel, &mass, &n) != 0) return 1;
 
+    /* PUNTO DE MODIFICACIÓN: con N grande no se reporta energía (U es O(N²)). */
+    if (args.energy_log && n > BH_MAX_N_ENERGY) {
+        fprintf(stderr, "Aviso: N = %lld > %d; no se calcula U ni se escribe %s\n",
+                (long long)n, BH_MAX_N_ENERGY, args.energy_log);
+        args.energy_log = NULL;
+    }
+
     omp_set_num_threads(args.workers);
     printf("N = %lld, pasos = %d, dt = %g, theta = %g, eps = %g\n",
            (long long)n, args.steps, args.dt, args.theta, args.eps);

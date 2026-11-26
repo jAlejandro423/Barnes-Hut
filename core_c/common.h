@@ -12,6 +12,7 @@ typedef struct {
 
 #define BH_MAX_DEPTH 21   /* PUNTO DE MODIFICACIÓN: profundidad máxima (raíz = 0) */
 #define BH_LEAF_SIZE 1    /* PUNTO DE MODIFICACIÓN: una hoja tiene como máximo esta cantidad de partículas */
+#define BH_MAX_N_ENERGY 5000 /* PUNTO DE MODIFICACIÓN: tope de N para reportar energía con suma directa */
 #define BH_BITS_PER_AXIS 21
 #define BH_CUBE_MARGIN 1e-6
 
