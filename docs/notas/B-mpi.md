@@ -27,7 +27,12 @@ Ver la sección "Interfaz del núcleo Python (acordada por A y B)" del `CLAUDE.m
    `Allreduce` de `lo`/`hi` entre ambas y todos los procesos usen los mismos códigos de Morton.
 3. **Fuentes y objetivos separados en el recorrido** (`src_pos`/`src_mass` y `tgt_pos`): python_mp y MPI
    calculan solo un subconjunto de partículas, y el mismo recorrido sirve para cada LET.
-   - La autointeracción no se excluye: con suavizado, `r_j - r_i = 0` da fuerza 0.
+   - La autointeracción no se excluye por índice (fuentes y objetivos son arreglos distintos, y en el LET
+     ni siquiera son las mismas partículas). Con ε > 0 su fuerza es 0. Con ε = 0, o ε tan pequeño que
+     r²·sqrt(r²) da 0, se salta el par: sin eso Numba lanza ZeroDivisionError y en C sale NaN en silencio.
+     Lo detectó A probando `direct_sum.py` con ε = 0 (yo había escrito que el suavizado bastaba siempre).
+     A propuso `r2 == 0`; se cambió a `r2·sqrt(r2) == 0` porque con ε = 1e-160 queda ε² = 1e-320 ≠ 0,
+     pero r³ sí da 0.
 4. **`integrate.py` lo escribe A**: son unas 30 líneas y va junto a la verificación de energía de
    `tools/verify.py`, que es de A. B ya tiene la versión más difícil.
    - Descartado: que lo escriba B porque su paso 1 lo necesita; basta con acordar la firma, y B revisa
@@ -56,6 +61,75 @@ Ver la sección "Interfaz del núcleo Python (acordada por A y B)" del `CLAUDE.m
    propio (más código sin ganancia en Python). ~0,018 s para N = 200.000.
 5. Riesgo para la demo: con `concentrada` y pocas partículas lejanas, el cubo es enorme, muchas partículas
    comparten código en el nivel 21 y quedan hojas grandes de suma directa (O(k²)). Ver `MAX_DEPTH`.
+
+### 2026-11-25 — `core_py/traverse.py`
+
+1. **Tres funciones pequeñas**: `pair_accel` (fórmula y protección de ε = 0), `accept_cell` (criterio θ,
+   `PUNTO DE MODIFICACIÓN`) y `accel_one` (recorrido). Todas las interacciones pasan por `pair_accel`:
+   hojas, celdas aceptadas y pseudo-hojas, así que la protección y la fórmula están en un solo lugar.
+   - Descartado: todo dentro de `accel_one` (un cambio de θ o de fórmula en la demo quedaría enterrado).
+2. **Recorrido con `node_next`, sin pila ni recursión**: hoja o celda aceptada → `node_next`; celda
+   rechazada → `node_first_child`. Termina en -1.
+   - Descartado: pila explícita (funciona, pero `node_next` ya existe y es lo que porta CUDA) y recursión
+     (el enunciado pide recorrido sin recursión; CUDA la evita).
+3. **Hojas con partículas siempre por suma directa**, sin probar θ: cubre las hojas grandes de `MAX_DEPTH`.
+4. **Costo = interacciones evaluadas** (partículas + celdas) por objetivo; es lo que reparten python_mp y MPI.
+5. **`compute_accelerations` sin `parallel=True`**: el paralelismo lo ponen python_mp y MPI con procesos;
+   mezclar hilos de Numba con procesos confundiría las mediciones.
+6. **Riesgo con θ grande**: con la distancia al centro de masa, si θ ≥ 1/sqrt(3) ≈ 0,58 una celda puede
+   aceptarse aunque contenga a la propia partícula (el centro de masa puede estar a una diagonal de ella).
+   Con θ = 0,5 no pasa. Alternativas documentadas en `accept_cell`: distancia al centro geométrico, o
+   exigir además d > tamaño.
+7. Resultados (N = 2.000, contra `direct_sum.py` del PR #3, criterio de `verify.py`):
+   - θ = 0: error ~1e-15 en las 4 distribuciones (no 0 exacto: se suma en orden de Morton y la referencia
+     en orden de entrada).
+   - θ = 0,5: mediana entre 2,8e-3 (plummer) y 1,3e-2 (concentrada, la más cercana al límite 2,5e-2,
+     porque la nube densa mide lo mismo que ε).
+   - Costo con θ = 0,5 en plummer: mínimo 52, medio 514, máximo 872 interacciones. La partícula más cara
+     cuesta 17 veces la más barata: repartir por número de partículas desbalancea.
+   - Fuentes partidas en 2 árboles y sumadas (como el LET): misma precisión contra la suma directa
+     (mediana 3,3e-3 contra 2,8e-3 con un solo árbol).
+   - N = 20.000 uniforme, θ = 0,5: árbol + recorrido en 0,11 s por paso (sin compilación).
+
+### 2026-11-25 — `mpi/main.py`, versión secuencial (P = 1)
+
+1. **El secuencial es el esqueleto de `mpi/main.py`**: el ciclo, el CLI y las salidas son los definitivos;
+   el reparto por costo, el LET y `comunicacion` se agregan encima. Se corre sin `mpirun`.
+   - Descartado: un archivo secuencial aparte (no está en la estructura, duplicaría código).
+2. **Las partículas se reordenan físicamente cada paso con un arreglo `ids`** (índice en el archivo).
+   `--dump-forces` usa `acc_orig[ids] = acc`. En MPI las partículas migran y `ids` hace falta igual.
+   - Descartado: dejar los arreglos en orden de entrada y ordenar copias (no sirve cuando migran).
+   - `sort_particles` reordena pos, vel, mass e ids con la misma permutación: si vel quedara en el orden
+     viejo, el kick mezclaría velocidades. Las fuerzas del paso 0 no lo detectarían; la energía sí.
+3. **Salidas con `%.17g`**: con `%.6g` falla E0 en `verify.py` (tolerancia 1e-8) aunque el cálculo esté bien.
+4. **Tiempos**: suma por fase de todos los pasos; la energía no se mide. El calentamiento de Numba se hace
+   con 64 partículas (Numba compila según los tipos, no según el tamaño), así no cuesta un paso completo.
+5. Resultados con `verify.py` del PR #3 (N = 2.000, 100 pasos): PASA en uniforme (θ = 0,5 y θ = 0),
+   plummer y dos_cumulos. E0 coincide hasta ~1e-14. Deriva de energía en uniforme 3e-4 con θ = 0,5 y
+   2,2e-4 con θ = 0: viene del integrador (dt), no del árbol.
+6. Tiempos con N = 20.000 uniforme, 20 pasos: recorrido 2,87 s (96 %), ordenamiento 0,07 s, árbol 0,04 s,
+   integración 0,01 s. El recorrido es lo que hay que repartir; la fracción secuencial (orden + árbol)
+   es ~4 %, lo que limita el speedup teórico (Amdahl) si esa parte no se paraleliza.
+
+### 2026-11-26 — `concentrada` no conserva la energía con los valores por defecto
+
+Con `verify.py` ya fusionado (N = 2.000, 100 pasos): fuerzas bien (mediana 1,3e-2, límite 2,5e-2) y E0
+coincide, pero la deriva de energía falla. No es un bug; hay dos causas y se separaron con mediciones:
+
+1. **dt demasiado grande**: la nube densa tiene σ = 1e-3, igual que ε, y colapsa en seguida. Con
+   dt = 1e-3 la energía cambia 600 % en el paso 1. Con θ = 0 (suma directa) y dt = 1e-6 se conserva
+   (deriva 5,9e-6): el integrador y las fuerzas exactas están bien.
+2. **Aproximación del árbol**: con dt = 1e-6 la deriva baja con θ, más o menos como θ²:
+
+   | θ                   | 0,5    | 0,4    | 0,3    | 0,2    | 0      |
+   |---------------------|--------|--------|--------|--------|--------|
+   | deriva (dt = 1e-6)  | 3,7e-3 | 2,2e-3 | 1,0e-3 | 2,8e-4 | 5,9e-6 |
+
+   Las fuerzas del árbol no salen exactamente de un potencial, y el error pesa más donde la nube densa
+   domina la energía (E0 = -182 contra -0,94 en uniforme).
+
+Para la demo con cúmulos densos: bajar `--dt` primero; si además piden conservar la energía, bajar `--theta`
+(más precisión a cambio de más interacciones). Afecta a todas las versiones, no solo a MPI.
 
 ## Decisiones pendientes (proponer antes de programar)
 
